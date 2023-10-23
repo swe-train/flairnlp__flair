@@ -31,9 +31,8 @@ class Tokenizer(ABC):
 class SpacyTokenizer(Tokenizer):
     """Tokenizer using spacy under the hood.
 
-    Implementation of :class:`Tokenizer`, using models from Spacy.
-
-    :param model a Spacy V2 model or the name of the model to load.
+    Args:
+        model: a Spacy V2 model or the name of the model to load.
     """
 
     def __init__(self, model) -> None:
@@ -256,9 +255,9 @@ class SciSpacyTokenizer(Tokenizer):
                 r"/",  # want to split at every slash
                 r"(?<=[0-9])[+\-\*^](?=[0-9-])",
                 rf"(?<=[{char_classes.ALPHA_LOWER}])\.(?=[{char_classes.ALPHA_UPPER}])",
-                r"(?<=[{a}]),(?=[{a}])".format(a=char_classes.ALPHA),
-                r'(?<=[{a}])[?";:=,.]*(?:{h})(?=[{a}])'.format(a=char_classes.ALPHA, h=char_classes.HYPHENS),
-                r"(?<=[{a}0-9])[:<>=/](?=[{a}])".format(a=char_classes.ALPHA),
+                rf"(?<=[{char_classes.ALPHA}]),(?=[{char_classes.ALPHA}])",
+                rf'(?<=[{char_classes.ALPHA}])[?";:=,.]*(?:{char_classes.HYPHENS})(?=[{char_classes.ALPHA}])',
+                rf"(?<=[{char_classes.ALPHA}0-9])[:<>=/](?=[{char_classes.ALPHA}])",
             ]
         )
 

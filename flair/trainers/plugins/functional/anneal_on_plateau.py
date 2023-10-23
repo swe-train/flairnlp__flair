@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any, Dict
 
 from flair.trainers.plugins.base import TrainerPlugin, TrainingInterrupt
 from flair.trainers.plugins.metric_records import MetricRecord
@@ -34,6 +35,7 @@ class AnnealingPlugin(TrainerPlugin):
         self.anneal_factor = anneal_factor
         self.patience = patience
         self.initial_extra_patience = initial_extra_patience
+        self.scheduler: AnnealOnPlateau
 
     def store_learning_rate(self):
         optimizer = self.trainer.optimizer
@@ -51,13 +53,7 @@ class AnnealingPlugin(TrainerPlugin):
         optimizer,
         **kw,
     ):
-        """Initialize different schedulers, including anneal target for AnnealOnPlateau, batch_growth_annealing, loading schedulers.
-
-        :param train_with_dev:
-        :param optimizer:
-        :param kw:
-        :return:
-        """
+        """Initialize different schedulers, including anneal target for AnnealOnPlateau, batch_growth_annealing, loading schedulers."""
         # minimize training loss if training with dev data, else maximize dev score
         anneal_mode = "min" if train_with_dev else "max"
 
@@ -75,13 +71,7 @@ class AnnealingPlugin(TrainerPlugin):
 
     @TrainerPlugin.hook
     def after_evaluation(self, current_model_is_best, validation_scores, **kw):
-        """Scheduler step of AnnealOnPlateau.
-
-        :param current_model_is_best:
-        :param validation_scores:
-        :param kw:
-        :return:
-        """
+        """Scheduler step of AnnealOnPlateau."""
         reduced_learning_rate: bool = self.scheduler.step(*validation_scores)
 
         self.store_learning_rate()
@@ -118,3 +108,14 @@ class AnnealingPlugin(TrainerPlugin):
             f"anneal_factor: '{self.anneal_factor}', "
             f"min_learning_rate: '{self.min_learning_rate}'"
         )
+
+    def get_state(self) -> Dict[str, Any]:
+        return {
+            **super().get_state(),
+            "base_path": str(self.base_path),
+            "min_learning_rate": self.min_learning_rate,
+            "anneal_factor": self.anneal_factor,
+            "patience": self.patience,
+            "initial_extra_patience": self.initial_extra_patience,
+            "anneal_with_restarts": self.anneal_with_restarts,
+        }

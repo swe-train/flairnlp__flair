@@ -71,7 +71,7 @@ class MetricRegression:
     @staticmethod
     def tsv_header(prefix=None):
         if prefix:
-            return "{0}_MEAN_SQUARED_ERROR\t{0}_MEAN_ABSOLUTE_ERROR\t{0}_PEARSON\t{0}_SPEARMAN".format(prefix)
+            return f"{prefix}_MEAN_SQUARED_ERROR\t{prefix}_MEAN_ABSOLUTE_ERROR\t{prefix}_PEARSON\t{prefix}_SPEARMAN"
 
         return "MEAN_SQUARED_ERROR\tMEAN_ABSOLUTE_ERROR\tPEARSON\tSPEARMAN"
 
@@ -99,7 +99,7 @@ class EvaluationMetric(Enum):
 
 class WeightExtractor:
     def __init__(self, directory: Union[str, Path], number_of_weights: int = 10) -> None:
-        if type(directory) is str:
+        if isinstance(directory, str):
             directory = Path(directory)
         self.weights_file = init_output_file(directory, "weights.txt")
         self.weights_dict: Dict[str, Dict[int, List[float]]] = defaultdict(lambda: defaultdict(list))
@@ -328,9 +328,11 @@ class AnnealOnPlateau:
 def init_output_file(base_path: Union[str, Path], file_name: str) -> Path:
     """Creates a local file which can be appended to.
 
-    :param base_path: the path to the directory
-    :param file_name: the file name
-    :return: the created file
+    Args:
+        base_path: the path to the directory
+        file_name: the file name
+
+    Returns: the created file
     """
     base_path = Path(base_path)
     base_path.mkdir(parents=True, exist_ok=True)
@@ -343,9 +345,11 @@ def init_output_file(base_path: Union[str, Path], file_name: str) -> Path:
 def convert_labels_to_one_hot(label_list: List[List[str]], label_dict: Dictionary) -> List[List[int]]:
     """Convert list of labels to a one hot list.
 
-    :param label_list: list of labels
-    :param label_dict: label dictionary
-    :return: converted label list
+    Args:
+        label_list: list of labels
+        label_dict: label dictionary
+
+    Returns: converted label list
     """
     return [[1 if label in labels else 0 for label in label_dict.get_items()] for labels in label_list]
 
