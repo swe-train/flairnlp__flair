@@ -100,6 +100,7 @@ from .biomedical import (
 
 # Expose all document classification datasets
 from .document_classification import (
+    AGNEWS,
     AMAZON_REVIEWS,
     COMMUNICATIVE_FUNCTIONS,
     GERMEVAL_2018_OFFENSIVE_LANGUAGE,
@@ -132,6 +133,10 @@ from .document_classification import (
 # word sense disambiguation
 # Expose all entity linking datasets
 from .entity_linking import (
+    CTD_CHEMICALS_DICTIONARY,
+    CTD_DISEASES_DICTIONARY,
+    NCBI_GENE_HUMAN_DICTIONARY,
+    NCBI_TAXONOMY_DICTIONARY,
     NEL_ENGLISH_AIDA,
     NEL_ENGLISH_AQUAINT,
     NEL_ENGLISH_IITB,
@@ -146,6 +151,8 @@ from .entity_linking import (
     WSD_UFSAC,
     WSD_WORDNET_GLOSS_TAGGED,
     ZELDA,
+    EntityLinkingDictionary,
+    HunerEntityLinkingDictionary,
 )
 
 # Expose all relation extraction datasets
@@ -194,6 +201,7 @@ from .sequence_labeling import (
     NER_GERMAN_EUROPARL,
     NER_GERMAN_GERMEVAL,
     NER_GERMAN_LEGAL,
+    NER_GERMAN_MOBIE,
     NER_GERMAN_POLITICS,
     NER_HIPE_2022,
     NER_HUNGARIAN,
@@ -313,6 +321,8 @@ __all__ = [
     "SentenceDataset",
     "MongoDataset",
     "StringDataset",
+    "EntityLinkingDictionary",
+    "AGNEWS",
     "ANAT_EM",
     "AZDZ",
     "BC2GM",
@@ -339,6 +349,7 @@ __all__ = [
     "FSU",
     "GELLUS",
     "GPRO",
+    "HunerEntityLinkingDictionary",
     "HUNER_CELL_LINE",
     "HUNER_CELL_LINE_CELL_FINDER",
     "HUNER_CELL_LINE_CLL",
@@ -387,6 +398,10 @@ __all__ = [
     "LINNEAUS",
     "LOCTEXT",
     "MIRNA",
+    "NCBI_GENE_HUMAN_DICTIONARY",
+    "NCBI_TAXONOMY_DICTIONARY",
+    "CTD_DISEASES_DICTIONARY",
+    "CTD_CHEMICALS_DICTIONARY",
     "NCBI_DISEASE",
     "ONTONOTES",
     "OSIRIS",
@@ -469,6 +484,7 @@ __all__ = [
     "NER_GERMAN_EUROPARL",
     "NER_GERMAN_GERMEVAL",
     "NER_GERMAN_LEGAL",
+    "NER_GERMAN_MOBIE",
     "NER_GERMAN_POLITICS",
     "NER_HIPE_2022",
     "NER_HUNGARIAN",

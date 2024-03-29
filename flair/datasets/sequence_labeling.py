@@ -47,6 +47,7 @@ class MultiFileJsonlCorpus(Corpus):
         encoding: str = "utf-8",
         text_column_name: str = "data",
         label_column_name: str = "label",
+        metadata_column_name: str = "metadata",
         label_type: str = "ner",
         **corpusargs,
     ) -> None:
@@ -61,6 +62,7 @@ class MultiFileJsonlCorpus(Corpus):
         :param dev_files: the name of the dev files, if empty, dev data is sampled from train
         :param text_column_name: Name of the text column inside the jsonl files.
         :param label_column_name: Name of the label column inside the jsonl files.
+        :param metadata_column_name: Name of the metadata column inside the jsonl files.
 
         :raises RuntimeError: If no paths are given
         """
@@ -71,6 +73,7 @@ class MultiFileJsonlCorpus(Corpus):
                         train_file,
                         text_column_name=text_column_name,
                         label_column_name=label_column_name,
+                        metadata_column_name=metadata_column_name,
                         label_type=label_type,
                         encoding=encoding,
                     )
@@ -89,6 +92,7 @@ class MultiFileJsonlCorpus(Corpus):
                         test_file,
                         text_column_name=text_column_name,
                         label_column_name=label_column_name,
+                        metadata_column_name=metadata_column_name,
                         label_type=label_type,
                     )
                     for test_file in test_files
@@ -106,6 +110,7 @@ class MultiFileJsonlCorpus(Corpus):
                         dev_file,
                         text_column_name=text_column_name,
                         label_column_name=label_column_name,
+                        metadata_column_name=metadata_column_name,
                         label_type=label_type,
                     )
                     for dev_file in dev_files
@@ -127,6 +132,7 @@ class JsonlCorpus(MultiFileJsonlCorpus):
         encoding: str = "utf-8",
         text_column_name: str = "data",
         label_column_name: str = "label",
+        metadata_column_name: str = "metadata",
         label_type: str = "ner",
         autofind_splits: bool = True,
         name: Optional[str] = None,
@@ -140,6 +146,7 @@ class JsonlCorpus(MultiFileJsonlCorpus):
         :param dev_file: the name of the dev file, if None, dev data is sampled from train
         :param text_column_name: Name of the text column inside the JSONL file.
         :param label_column_name: Name of the label column inside the JSONL file.
+        :param metadata_column_name: Name of the metadata column inside the JSONL file.
         :param autofind_splits: Whether train, test and dev file should be determined automatically
         :param name: name of the Corpus see flair.data.Corpus
         """
@@ -153,6 +160,7 @@ class JsonlCorpus(MultiFileJsonlCorpus):
             test_files=[test_file] if test_file else [],
             text_column_name=text_column_name,
             label_column_name=label_column_name,
+            metadata_column_name=metadata_column_name,
             label_type=label_type,
             name=name if data_folder is None else str(data_folder),
             encoding=encoding,
@@ -167,21 +175,32 @@ class JsonlDataset(FlairDataset):
         encoding: str = "utf-8",
         text_column_name: str = "data",
         label_column_name: str = "label",
+        metadata_column_name: str = "metadata",
         label_type: str = "ner",
     ) -> None:
         """Instantiates a JsonlDataset and converts all annotated char spans to token tags using the IOB scheme.
 
         The expected file format is:
-        { "<text_column_name>": "<text>", "label_column_name": [[<start_char_index>, <end_char_index>, <label>],...] }
 
-        :param path_to_json._file: File to read
-        :param text_column_name: Name of the text column
-        :param label_column_name: Name of the label column
+        .. code-block:: json
+
+            {
+                "<text_column_name>": "<text>",
+                "<label_column_name>": [[<start_char_index>, <end_char_index>, <label>],...],
+                "<metadata_column_name>": [[<metadata_key>, <metadata_value>],...]
+            }
+
+        Args:
+            path_to_jsonl_file: File to read
+            text_column_name: Name of the text column
+            label_column_name: Name of the label column
+            metadata_column_name: Name of the metadata column
         """
         path_to_json_file = Path(path_to_jsonl_file)
 
         self.text_column_name = text_column_name
         self.label_column_name = label_column_name
+        self.metadata_column_name = metadata_column_name
         self.label_type = label_type
         self.path_to_json_file = path_to_json_file
 
@@ -191,9 +210,11 @@ class JsonlDataset(FlairDataset):
                 current_line = json.loads(line)
                 raw_text = current_line[text_column_name]
                 current_labels = current_line[label_column_name]
+                current_metadatas = current_line.get(self.metadata_column_name, [])
                 current_sentence = Sentence(raw_text)
 
                 self._add_labels_to_sentence(raw_text, current_sentence, current_labels)
+                self._add_metadatas_to_sentence(current_sentence, current_metadatas)
 
                 self.sentences.append(current_sentence)
 
@@ -246,6 +267,15 @@ class JsonlDataset(FlairDataset):
             )
 
         sentence[start_idx : end_idx + 1].add_label(self.label_type, label)
+
+    def _add_metadatas_to_sentence(self, sentence: Sentence, metadatas: List[Tuple[str, str]]):
+        # Add metadatas for sentence
+        for metadata in metadatas:
+            self._add_metadata_to_sentence(sentence, metadata[0], metadata[1])
+
+    @staticmethod
+    def _add_metadata_to_sentence(sentence: Sentence, metadata_key: str, metadata_value: str):
+        sentence.add_metadata(metadata_key, metadata_value)
 
     def is_in_memory(self) -> bool:
         # Currently all Jsonl Datasets are stored in Memory
@@ -440,7 +470,7 @@ class ColumnDataset(FlairDataset):
         Args:
             path_to_column_file: path to the file with the column-formatted data
             column_name_map: a map specifying the column format
-            column_delimiter: default is to split on any separatator, but you can overwrite for instance with "\t" to split only on tabs
+            column_delimiter: default is to split on any separator, but you can overwrite for instance with "\t" to split only on tabs
             comment_symbol: if set, lines that begin with this symbol are treated as comments
             in_memory: If set to True, the dataset is kept in memory as Sentence objects, otherwise does disk reads
             document_separator_token: If provided, sentences that function as document boundaries are so marked
@@ -2729,14 +2759,12 @@ class NER_GERMAN_POLITICS(ColumnCorpus):
             with (data_folder / "train.txt").open("w", encoding="utf-8") as train, (data_folder / "test.txt").open(
                 "w", encoding="utf-8"
             ) as test, (data_folder / "dev.txt").open("w", encoding="utf-8") as dev:
-                k = 0
-                for line in file.readlines():
-                    k += 1
+                for k, line in enumerate(file.readlines(), start=1):
                     if k <= train_len:
                         train.write(line)
-                    elif k > train_len and k <= (train_len + test_len):
+                    elif train_len < k <= (train_len + test_len):
                         test.write(line)
-                    elif k > (train_len + test_len) and k <= num_lines:
+                    elif (train_len + test_len) < k <= num_lines:
                         dev.write(line)
 
 
@@ -4758,6 +4786,53 @@ class NER_NERMUD(MultiCorpus):
             corpora,
             sample_missing_splits=False,
             name="nermud",
+        )
+
+
+class NER_GERMAN_MOBIE(ColumnCorpus):
+    def __init__(
+        self,
+        base_path: Optional[Union[str, Path]] = None,
+        in_memory: bool = True,
+        **corpusargs,
+    ) -> None:
+        """Initialize the German MobIE NER dataset.
+
+        The German MobIE Dataset was introduced in the MobIE paper (https://aclanthology.org/2021.konvens-1.22/).
+
+        This is a German-language dataset that has been human-annotated with 20 coarse- and fine-grained entity types,
+        and it includes entity linking information for geographically linkable entities. The dataset comprises 3,232
+        social media texts and traffic reports, totaling 91K tokens, with 20.5K annotated entities, of which 13.1K are
+        linked to a knowledge base. In total, 20 different named entities are annotated.
+        :param base_path: Default is None, meaning that corpus gets auto-downloaded and loaded. You can override this
+        to point to a different folder but typically this should not be necessary.
+        :param in_memory: If True, keeps dataset in memory giving speedups in training. Not recommended due to heavy RAM usage.
+        """
+        base_path = flair.cache_root / "datasets" if not base_path else Path(base_path)
+        dataset_name = self.__class__.__name__.lower()
+        data_folder = base_path / dataset_name
+        data_path = flair.cache_root / "datasets" / dataset_name
+
+        columns = {0: "text", 3: "ner"}
+
+        train_data_file = data_path / "train.conll2003"
+        if not train_data_file.is_file():
+            temp_file = cached_path(
+                "https://github.com/DFKI-NLP/MobIE/raw/master/v1_20210811/ner_conll03_formatted.zip",
+                Path("datasets") / dataset_name,
+            )
+            from zipfile import ZipFile
+
+            with ZipFile(temp_file, "r") as zip_file:
+                zip_file.extractall(path=data_path)
+
+        super().__init__(
+            data_folder,
+            columns,
+            in_memory=in_memory,
+            comment_symbol=None,
+            document_separator_token="-DOCSTART-",
+            **corpusargs,
         )
 
 

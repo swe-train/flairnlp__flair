@@ -13,6 +13,7 @@ from torch.utils.data.dataset import Dataset
 from tqdm import tqdm
 
 import flair
+from flair.class_utils import get_non_abstract_subclasses
 from flair.data import DT, DT2, Corpus, Dictionary, Sentence, _iter_dataset
 from flair.datasets import DataLoader, FlairDatapointDataset
 from flair.embeddings import Embeddings
@@ -137,7 +138,7 @@ class Model(torch.nn.Module, typing.Generic[DT], ABC):
         # if this class is abstract, go through all inheriting classes and try to fetch and load the model
         if inspect.isabstract(cls):
             # get all non-abstract subclasses
-            subclasses = get_non_abstract_subclasses(cls)
+            subclasses = list(get_non_abstract_subclasses(cls))
 
             # try to fetch the model for each subclass. if fetching is possible, load model and return it
             for model_cls in subclasses:
@@ -224,7 +225,9 @@ class Model(torch.nn.Module, typing.Generic[DT], ABC):
 
 class ReduceTransformerVocabMixin(ABC):
     @abstractmethod
-    def get_used_tokens(self, corpus: Corpus) -> typing.Iterable[List[str]]:
+    def get_used_tokens(
+        self, corpus: Corpus, context_lenth: int = 0, respect_document_boundaries: bool = True
+    ) -> typing.Iterable[List[str]]:
         pass
 
 
@@ -337,7 +340,7 @@ class Classifier(Model[DT], typing.Generic[DT], ReduceTransformerVocabMixin, ABC
             true_values_span_aligned = []
             predicted_values_span_aligned = []
             for span in all_spans:
-                list_of_gold_values_for_span = all_true_values[span] if span in all_true_values else ["O"]
+                list_of_gold_values_for_span = all_true_values.get(span, ["O"])
                 # delete exluded labels if exclude_labels is given
                 for excluded_label in exclude_labels:
                     if excluded_label in list_of_gold_values_for_span:
@@ -346,9 +349,7 @@ class Classifier(Model[DT], typing.Generic[DT], ReduceTransformerVocabMixin, ABC
                 if not list_of_gold_values_for_span:
                     continue
                 true_values_span_aligned.append(list_of_gold_values_for_span)
-                predicted_values_span_aligned.append(
-                    all_predicted_values[span] if span in all_predicted_values else ["O"]
-                )
+                predicted_values_span_aligned.append(all_predicted_values.get(span, ["O"]))
 
             # write all_predicted_values to out_file if set
             if out_path:
@@ -434,71 +435,65 @@ class Classifier(Model[DT], typing.Generic[DT], ReduceTransformerVocabMixin, ABC
                 labels=labels,
             )
 
+            # compute accuracy separately as it is not always in classification_report (e.. when micro avg exists)
             accuracy_score = round(sklearn.metrics.accuracy_score(y_true, y_pred), 4)
-            macro_f_score = round(classification_report_dict["macro avg"]["f1-score"], 4)
 
             # if there is only one label, then "micro avg" = "macro avg"
             if len(target_names) == 1:
                 classification_report_dict["micro avg"] = classification_report_dict["macro avg"]
 
-            if "micro avg" in classification_report_dict:
-                # micro average is only computed if zero-label exists (for instance "O")
-                micro_f_score = round(classification_report_dict["micro avg"]["f1-score"], 4)
-            else:
-                # if no zero-label exists (such as in POS tagging) micro average is equal to accuracy
-                micro_f_score = round(classification_report_dict["accuracy"], 4)
+            # The "micro avg" appears only in the classification report if no prediction is possible.
+            # Otherwise, it is identical to the "macro avg". In this case, we add it to the report.
+            if "micro avg" not in classification_report_dict:
+                classification_report_dict["micro avg"] = {}
+                for precision_recall_f1 in classification_report_dict["macro avg"]:
+                    classification_report_dict["micro avg"][precision_recall_f1] = classification_report_dict[
+                        "accuracy"
+                    ]
 
-            # same for the main score
-            if "micro avg" not in classification_report_dict and main_evaluation_metric[0] == "micro avg":
-                main_score = classification_report_dict["accuracy"]
-            else:
-                main_score = classification_report_dict[main_evaluation_metric[0]][main_evaluation_metric[1]]
+            detailed_result = (
+                "\nResults:"
+                f"\n- F-score (micro) {round(classification_report_dict['micro avg']['f1-score'], 4)}"
+                f"\n- F-score (macro) {round(classification_report_dict['macro avg']['f1-score'], 4)}"
+                f"\n- Accuracy {accuracy_score}"
+                "\n\nBy class:\n" + classification_report
+            )
+
+            # Create and populate score object for logging with all evaluation values, plus the loss
+            scores: Dict[Union[Tuple[str, ...], str], Any] = {}
+
+            for avg_type in ("micro avg", "macro avg"):
+                for metric_type in ("f1-score", "precision", "recall"):
+                    scores[(avg_type, metric_type)] = classification_report_dict[avg_type][metric_type]
+
+            scores["accuracy"] = accuracy_score
+
+            if average_over > 0:
+                eval_loss /= average_over
+            scores["loss"] = eval_loss.item()
+
+            return Result(
+                main_score=classification_report_dict[main_evaluation_metric[0]][main_evaluation_metric[1]],
+                detailed_results=detailed_result,
+                classification_report=classification_report_dict,
+                scores=scores,
+            )
 
         else:
             # issue error and default all evaluation numbers to 0.
-            log.error(
-                "ACHTUNG! No gold labels and no all_predicted_values found! "
-                "Could be an error in your corpus or how you "
-                "initialize the trainer!"
+            error_text = (
+                f"It was not possible to compute evaluation values because: \n"
+                f"- The evaluation data has no gold labels for label_type='{gold_label_type}'!\n"
+                f"- And no predictions were made!\n"
+                "Double check your corpus (if the test split has labels), and how you initialize the ModelTrainer!"
             )
-            accuracy_score = micro_f_score = macro_f_score = main_score = 0.0
-            classification_report = ""
-            classification_report_dict = {}
 
-        detailed_result = (
-            "\nResults:"
-            f"\n- F-score (micro) {micro_f_score}"
-            f"\n- F-score (macro) {macro_f_score}"
-            f"\n- Accuracy {accuracy_score}"
-            "\n\nBy class:\n" + classification_report
-        )
-
-        scores: Dict[Union[Tuple[str, ...], str], Any] = {}
-
-        for avg_type in ("micro avg", "macro avg"):
-            for metric_type in ("f1-score", "precision", "recall"):
-                if avg_type == "micro avg" and avg_type not in classification_report_dict:
-                    value = classification_report_dict["accuracy"]
-
-                else:
-                    value = classification_report_dict[avg_type][metric_type]
-
-                scores[(avg_type, metric_type)] = value
-
-        scores["accuracy"] = accuracy_score
-
-        if average_over > 0:
-            eval_loss /= average_over
-        scores["loss"] = eval_loss.item()
-
-        result = Result(
-            main_score=main_score,
-            detailed_results=detailed_result,
-            classification_report=classification_report_dict,
-            scores=scores,
-        )
-
-        return result
+            return Result(
+                main_score=0.0,
+                detailed_results=error_text,
+                classification_report={},
+                scores={"loss": 0.0},
+            )
 
     @abstractmethod
     def predict(
@@ -544,9 +539,13 @@ class Classifier(Model[DT], typing.Generic[DT], ReduceTransformerVocabMixin, ABC
             lines.append(eval_line)
         return lines
 
-    def get_used_tokens(self, corpus: Corpus) -> typing.Iterable[List[str]]:
+    def get_used_tokens(
+        self, corpus: Corpus, context_length: int = 0, respect_document_boundaries: bool = True
+    ) -> typing.Iterable[List[str]]:
         for sentence in _iter_dataset(corpus.get_all_sentences()):
             yield [t.text for t in sentence]
+            yield [t.text for t in sentence.left_context(context_length, respect_document_boundaries)]
+            yield [t.text for t in sentence.right_context(context_length, respect_document_boundaries)]
 
     @classmethod
     def load(cls, model_path: Union[str, Path, Dict[str, Any]]) -> "Classifier":
@@ -700,9 +699,11 @@ class DefaultClassifier(Classifier[DT], typing.Generic[DT, DT2], ABC):
         else:
             return torch.tensor(
                 [
-                    self.label_dictionary.get_idx_for_item(label[0])
-                    if len(label) > 0
-                    else self.label_dictionary.get_idx_for_item("O")
+                    (
+                        self.label_dictionary.get_idx_for_item(label[0])
+                        if len(label) > 0
+                        else self.label_dictionary.get_idx_for_item("O")
+                    )
                     for label in labels
                 ],
                 dtype=torch.long,
@@ -828,6 +829,7 @@ class DefaultClassifier(Classifier[DT], typing.Generic[DT, DT2], ABC):
 
             overall_loss = torch.zeros(1, device=flair.device)
             label_count = 0
+            has_any_unknown_label = False
             for batch in batches:
                 # filter data points in batch
                 batch = [dp for dp in batch if self._filter_data_point(dp)]
@@ -865,6 +867,7 @@ class DefaultClassifier(Classifier[DT], typing.Generic[DT, DT2], ABC):
                                 has_unknown_label = True
 
                         if has_unknown_label:
+                            has_any_unknown_label = True
                             scores = torch.index_select(scores, 0, torch.tensor(filtered_indices, device=flair.device))
 
                         gold_labels = self._prepare_label_tensor([data_points[index] for index in filtered_indices])
@@ -908,7 +911,7 @@ class DefaultClassifier(Classifier[DT], typing.Generic[DT, DT2], ABC):
                 self._post_process_batch_after_prediction(batch, label_name)
 
             if return_loss:
-                if has_unknown_label:
+                if has_any_unknown_label:
                     log.info(
                         "During evaluation, encountered labels that are not in the label_dictionary:"
                         "Evaluation loss is computed without them."
@@ -974,14 +977,3 @@ class DefaultClassifier(Classifier[DT], typing.Generic[DT, DT2], ABC):
         from typing import cast
 
         return cast("DefaultClassifier", super().load(model_path=model_path))
-
-
-def get_non_abstract_subclasses(cls):
-    all_subclasses = []
-    for subclass in cls.__subclasses__():
-        all_subclasses.extend(get_non_abstract_subclasses(subclass))
-        if inspect.isabstract(subclass):
-            continue
-        all_subclasses.append(subclass)
-
-    return all_subclasses

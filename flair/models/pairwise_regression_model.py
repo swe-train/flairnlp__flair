@@ -89,10 +89,16 @@ class TextPairRegressor(flair.nn.Model[TextPair], ReduceTransformerVocabMixin):
     def label_type(self):
         return self.label_name
 
-    def get_used_tokens(self, corpus: Corpus) -> typing.Iterable[List[str]]:
+    def get_used_tokens(
+        self, corpus: Corpus, context_length: int = 0, respect_document_boundaries: bool = True
+    ) -> typing.Iterable[List[str]]:
         for sentence_pair in _iter_dataset(corpus.get_all_sentences()):
             yield [t.text for t in sentence_pair.first]
+            yield [t.text for t in sentence_pair.first.left_context(context_length, respect_document_boundaries)]
+            yield [t.text for t in sentence_pair.first.right_context(context_length, respect_document_boundaries)]
             yield [t.text for t in sentence_pair.second]
+            yield [t.text for t in sentence_pair.second.left_context(context_length, respect_document_boundaries)]
+            yield [t.text for t in sentence_pair.second.right_context(context_length, respect_document_boundaries)]
 
     def forward_loss(self, pairs: List[TextPair]) -> Tuple[torch.Tensor, int]:
         loss, num = self._forward_loss_and_scores(pairs=pairs, return_num=True, return_scores=False)
@@ -251,7 +257,7 @@ class TextPairRegressor(flair.nn.Model[TextPair], ReduceTransformerVocabMixin):
                 if not batch:
                     continue
 
-                data_point_tensor = self._encode_data_points(pairs)
+                data_point_tensor = self._encode_data_points(batch)
                 scores = self.decoder(data_point_tensor)
 
                 for sentence, score in zip(batch, scores.tolist()):
@@ -312,9 +318,7 @@ class TextPairRegressor(flair.nn.Model[TextPair], ReduceTransformerVocabMixin):
 
                     if out_path is not None:
                         for pair, prediction, true_value in zip(batch, results, true_values):
-                            eval_line = "{}\t{}\t{}\t{}\n".format(
-                                pair.first.to_original_text(), pair.second.to_original_text(), true_value, prediction
-                            )
+                            eval_line = f"{pair.first.to_original_text()}\t{pair.second.to_original_text()}\t{true_value}\t{prediction}\n"
                             out_file.write(eval_line)
 
                     store_embeddings(batch, embedding_storage_mode)

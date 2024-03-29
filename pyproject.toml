@@ -28,6 +28,7 @@ filterwarnings = [
     "ignore:The class LayoutLMv3FeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please use LayoutLMv3ImageProcessor instead.",  # huggingface layoutlmv3 has deprecated calls.
     "ignore:pkg_resources",  # huggingface has deprecated calls.
     'ignore:Deprecated call to `pkg_resources',  # huggingface has deprecated calls.
+    'ignore:distutils Version classes are deprecated.',  # faiss uses deprecated distutils.
 ]
 markers = [
     "integration",
@@ -47,6 +48,7 @@ ignore_errors = true
 line-length = 120
 target-version = "py37"
 
+[tool.ruff.lint]
 #select = ["ALL"]    # Uncommit to autofix all the things
 select = [
   "C4",
@@ -95,12 +97,12 @@ unfixable = [
   "F841",   # Do not remove unused variables automatically
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "flair/embeddings/legacy.py" = ["D205"]
 "scripts/*" = ["INP001"]  #  no need for __ini__ for scripts
 "flair/datasets/*" = ["D417"]  # need to fix datasets in a unified way later.
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.pydocstyle]

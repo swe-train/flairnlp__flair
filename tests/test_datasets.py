@@ -872,6 +872,29 @@ def test_masakha_pos_corpus(tasks_base_path):
             check_number_sentences(len(corpus.test), gold_stats["test"], "test", language, version)
 
 
+def test_german_mobie(tasks_base_path):
+    corpus = flair.datasets.NER_GERMAN_MOBIE()
+
+    # See MobIE paper (https://aclanthology.org/2021.konvens-1.22/), table 2
+    ref_sentences = 7_077
+    ref_tokens = 90_971
+
+    actual_sentences = sum(
+        [1 for sentence in corpus.train + corpus.dev + corpus.test if sentence[0].text != "-DOCSTART-"]
+    )
+    actual_tokens = sum(
+        [len(sentence) for sentence in corpus.train + corpus.dev + corpus.test if sentence[0].text != "-DOCSTART-"]
+    )
+
+    assert ref_sentences == actual_sentences, (
+        f"Number of parsed sentences ({actual_sentences}) does not match with "
+        f"reported number of sentences ({ref_sentences})!"
+    )
+    assert (
+        ref_tokens == actual_tokens
+    ), f"Number of parsed tokens ({actual_tokens}) does not match with reported number of tokens ({ref_tokens})!"
+
+
 def test_multi_file_jsonl_corpus_should_use_label_type(tasks_base_path):
     corpus = MultiFileJsonlCorpus(
         train_files=[tasks_base_path / "jsonl/train.jsonl"],
@@ -921,6 +944,16 @@ def test_jsonl_corpus_loads_spans(tasks_base_path):
     assert corpus.train is not None
     example = corpus.train[0]
     assert len(example.get_spans("ner")) > 0
+
+
+def test_jsonl_corpus_loads_metadata(tasks_base_path):
+    """Tests reading a JsonlDataset containing metadata."""
+    dataset = JsonlDataset(tasks_base_path / "jsonl" / "testa.jsonl")
+
+    assert len(dataset.sentences) == 3
+    assert dataset.sentences[0].get_metadata("from") == 123
+    assert dataset.sentences[1].get_metadata("from") == 124
+    assert dataset.sentences[2].get_metadata("from") == 125
 
 
 def test_ontonotes_download():
